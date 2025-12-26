@@ -1,61 +1,50 @@
 import random
+import requests
 from flask import Flask, request, jsonify
-
-# Если хочешь подключать локальную модель:
-# from transformers import pipeline
-# generator = pipeline('text-generation', model='gpt2') # можно заменить на другую маленькую модель
 
 app = Flask(__name__)
 
 PHRASES = {
-    "привет": ["Йо, братуха! 😎", "Здарова, кореш! 💀", "Йоу, держись! 🤯", "Эй, привет! 🫵"],
-    "погода": ["Брат, на улице +2, одевай шапку 💀", "Ё-маё, дождь льёт 😏", "Солнце светит, но ветер режет 🤯"],
-    "шутка": ["Бро, два пацана заходят в бар... 💀", "Йо, смешно или нет, мне всё равно 🤯"],
-    "настроение": ["Брат, я кайфую 😎", "Ща чиллим 💀", "Пацан, на эмоциях 🤬"],
-    "жалоба": ["Брат, опять глюк 😳", "Ща всё сломалось 🤯", "Ё, проблемки 💀"],
-    "благодарность": ["Бро, спасибо 💪", "Йо, ценю 😎", "Ща реально благодарен 🤯"],
-    "другое": ["Брат, ща не понял 😳", "Пацан, чё ты имеешь ввиду? 😏"]
+    "привет": ["Йо, братуха! 😎", "Здарова, кореш! 💀"],
+    "погода": ["На улице +2, одевай шапку 💀", "Дождь льёт, не залипай 😏"],
+    "шутка": ["Два пацана заходят в бар... 💀", "Смешно или нет, мне всё равно 🤯"]
 }
 
 EXTRAS = ["💀","😳","😏","🤯","🫵","🤬","💪","😎"]
 
 def detect_category(text):
     text = text.lower()
-    if any(word in text for word in ["привет","здарова","йо"]): return "привет"
-    if any(word in text for word in ["погода","солнце","дождь","мороз"]): return "погода"
-    if any(word in text for word in ["шутка","анекдот","посмеши"]): return "шутка"
-    if any(word in text for word in ["настроение","как дела","кайф"]): return "настроение"
-    if any(word in text for word in ["жалоба","проблема","глюк","сломалось"]): return "жалоба"
-    if any(word in text for word in ["спасибо","ценю","благодарю"]): return "благодарность"
-    return "другое"
+    if any(w in text for w in ["привет","йо"]): return "привет"
+    if any(w in text for w in ["погода","солнце","дождь"]): return "погода"
+    if any(w in text for w in ["шутка","анекдот"]): return "шутка"
+    return "привет"
 
-def generate_neural_response(text):
-    # Пример генерации через нейронку
-    # Если нет модели, возвращаем случайный вариант словаря
-    # uncomment ниже если подключишь генератор
-    # response = generator(text, max_length=50, do_sample=True)[0]['generated_text']
-    # return response
-    return random.choice(PHRASES["другое"]) + " " + random.choice(EXTRAS)
+def generate_ai_response(text):
+    # Пример с OpenAI API
+    API_KEY = "ТВОЙ_API_KEY"
+    headers = {"Authorization": f"Bearer {API_KEY}"}
+    prompt = f"Алиса-гопник, отвечает на текст: {text}. Шутки, мат, сарказм, эмодзи."
+    data = {"model":"gpt-3.5-turbo","messages":[{"role":"user","content":prompt}], "max_tokens":50}
+    r = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
+    if r.status_code == 200:
+        return r.json()["choices"][0]["message"]["content"]
+    else:
+        return random.choice(PHRASES["привет"])
 
 @app.route("/", methods=["POST"])
 def main():
     user_text = request.json.get("request", {}).get("original_utterance", "")
     category = detect_category(user_text)
 
-    # 50% шанс использовать словарь, 50% шанс нейронку
     if random.random() < 0.5:
         phrase = random.choice(PHRASES[category])
     else:
-        phrase = generate_neural_response(user_text)
-    
-    # Иногда добавляем случайное эмодзи
+        phrase = generate_ai_response(user_text)
+
     if random.random() < 0.3:
         phrase += " " + random.choice(EXTRAS)
 
-    return jsonify({
-        "response": {"text": phrase, "end_session": False},
-        "version": "1.0"
-    })
+    return jsonify({"response":{"text":phrase,"end_session":False},"version":"1.0"})
 
 if __name__ == "__main__":
     app.run()
